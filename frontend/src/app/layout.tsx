@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '../components/ui/toaster';
 import { AuthButton } from '../components/AuthButton';
+import { usePathname } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: 'WhiteMagic',
@@ -13,6 +14,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const showAuthButton = !pathname.includes('/whiteboard/');
   return (
     <html lang="en">
       <head>
@@ -29,7 +32,7 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased">
         <header className="flex justify-end p-4">
-          <AuthButton />
+          {showAuthButton && <AuthButton />}
         </header>
         {children}
         <Toaster />

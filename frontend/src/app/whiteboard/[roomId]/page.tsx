@@ -7,7 +7,7 @@ type WhiteboardPageProps = {
   };
 };
 
-export default async function WhiteboardPage({ params }: WhiteboardPageProps) {
+export default function WhiteboardPage({ params }: WhiteboardPageProps) {
   return (
     <div className="h-svh w-full overflow-hidden">
       <TooltipProvider>

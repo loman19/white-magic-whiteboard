@@ -35,6 +35,24 @@ export function Whiteboard({ roomId }: { roomId: string }) {
   const drawingHistory = useRef<string[]>([]);
   const { toast } = useToast();
   const socketRef = useSocket(roomId);
+  const [userName, setUserName] = useState<string | null>(null);
+
+  // Fetch user name if logged in
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        // Try to fetch from profiles table
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('user_id', user.id)
+          .single();
+        setUserName(profile?.name || user.email || user.id);
+      } else {
+        setUserName(null);
+      }
+    });
+  }, []);
 
   const drawLine = useCallback(
     ({ prevPoint, currentPoint, ctx }: Omit<Draw, 'color' | 'strokeWidth'>) => {
@@ -192,6 +210,12 @@ export function Whiteboard({ roomId }: { roomId: string }) {
                     <Users className="h-4 w-4 mr-2" />
                     Share
                 </Button>
+                <Button variant="outline" size="sm" onClick={handleSave}>
+                  Save
+                </Button>
+                {userName && (
+                  <Badge variant="secondary" className="p-2">{userName}</Badge>
+                )}
             </div>
         </header>
 
