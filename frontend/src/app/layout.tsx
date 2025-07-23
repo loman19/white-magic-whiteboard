@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '../components/ui/toaster';
+import { AuthButton } from '../components/AuthButton';
 
 export const metadata: Metadata = {
   title: 'WhiteMagic',
@@ -27,6 +28,9 @@ export default function RootLayout({
         ></link>
       </head>
       <body className="font-body antialiased">
+        <header className="flex justify-end p-4">
+          <AuthButton />
+        </header>
         {children}
         <Toaster />
       </body>
