@@ -6,7 +6,7 @@ import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '../../lib/supabaseClient';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
-// import { useToast } from '../../hooks/use-toast'; // If you want to re-enable later
+import { useToast } from '../../hooks/use-toast'; // If you want to re-enable later
 
 function AuthPageInner() {
   const router = useRouter();
