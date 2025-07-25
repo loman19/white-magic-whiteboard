@@ -30,8 +30,8 @@ export default function WhiteboardPage() {
     const joinRoom = async () => {
       let userId = searchParams.get('user');
       if (!userId) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) userId = user.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) userId = user.id;
       }
       if (!userId) {
         userId = promptGuestName();

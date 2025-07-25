@@ -19,6 +19,8 @@ type ToolbarProps = {
   undoLast: () => void;
   isLoadingPalette: boolean;
   palette: string[];
+  tool: 'draw' | 'eraser';
+  setTool: (tool: 'draw' | 'eraser') => void;
 };
 
 export function Toolbar({
@@ -30,6 +32,8 @@ export function Toolbar({
   undoLast,
   isLoadingPalette,
   palette,
+  tool,
+  setTool,
 }: ToolbarProps) {
   const eraserColor = '#F0F0F0';
 
@@ -44,10 +48,10 @@ export function Toolbar({
                   variant="outline"
                   size="icon"
                   className={`h-8 w-8 rounded-full transition-all duration-200 ${
-                    color === c && 'ring-2 ring-primary ring-offset-2'
+                    color === c && tool === 'draw' && 'ring-2 ring-primary ring-offset-2'
                   }`}
                   style={{ backgroundColor: c }}
-                  onClick={() => setColor(c)}
+                  onClick={() => { setColor(c); setTool('draw'); }}
                   aria-label={`Color ${c}`}
                 />
               </TooltipTrigger>
@@ -80,10 +84,10 @@ export function Toolbar({
            <Tooltip>
             <TooltipTrigger asChild>
               <Button
-                variant={color === eraserColor ? 'secondary' : 'outline'}
+                variant={tool === 'eraser' ? 'secondary' : 'outline'}
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setColor(eraserColor)}
+                onClick={() => setTool('eraser')}
               >
                 <Eraser className="h-4 w-4" />
               </Button>

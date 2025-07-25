@@ -1,62 +1,107 @@
-# Firebase Studio
+# Collaborative Whiteboard App
 
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
+A real-time, multi-user whiteboard built with Next.js (frontend), Node.js/Express (backend), Socket.IO, and Supabase/Postgres for persistent storage.
 
 ---
 
-## API Reference
+## Project Structure
 
-### Frontend API Calls
-- `POST http://localhost:3001/api/whiteboard/save` — Save whiteboard data (only for logged-in users)
-- `GET http://localhost:3001/api/whiteboard/:roomId` — Load whiteboard data
-- `POST http://localhost:3001/api/whiteboard/join` — Join a whiteboard room
-- `GET http://localhost:3001/api/whiteboard/:roomId/session` — Get session info for a room
-- `POST http://localhost:3001/api/whiteboard/set-drawer` — Set the current drawer
-- `POST http://localhost:3001/api/whiteboard/create` — Create a new whiteboard room
-
-### Backend API Endpoints
-- `GET /` — Root, test endpoint
-- `GET /api/hello` — Test endpoint
-- `GET /api/whiteboard/:roomId` — Load whiteboard data
-- `GET /api/whiteboard/:roomId/session` — Get session info for a room
-- `POST /api/whiteboard/save` — Save whiteboard data (only for logged-in users)
-- `POST /api/whiteboard/create` — Create a new whiteboard room
-- `POST /api/whiteboard/set-drawer` — Set the current drawer
-- `POST /api/whiteboard/join` — Join a whiteboard room
-- `POST /api/whiteboard/update-host` — Update host after login
+```
+Canvas-master/
+│
+├── frontend/                # Next.js app (UI, real-time client)
+│   ├── app/                 # Next.js app directory (routing, pages)
+│   ├── components/          # React components (UI, whiteboard, toolbar, forms)
+│   │   └── whiteboard/      # Whiteboard and toolbar components
+│   ├── hooks/               # Custom React hooks (drawing, socket, etc.)
+│   ├── lib/                 # Utility libraries (API, Supabase client)
+│   ├── types/               # TypeScript types
+│   ├── tailwind.config.ts   # Tailwind CSS config
+│   └── ...                  # Other config and support files
+│
+├── backend/                 # Node.js/Express backend (API, Socket.IO)
+│   ├── src/                 # Source code (index.ts: main server, db.ts)
+│   ├── package.json         # Backend dependencies
+│   └── ...                  # Build, config, and node_modules
+│
+├── docs/                    # Project documentation
+│   └── blueprint.md         # Feature and style blueprint
+│
+├── README.md                # Project overview and instructions
+└── ...
+```
 
 ---
 
-## Features & Usage
+## Setup Instructions
 
-- **Authentication & Save Flow:**
-  - Only logged-in users can save whiteboards.
-  - If a guest clicks "Save", they are redirected to the login page. After successful login, their whiteboard is automatically saved and a success message is shown.
-- **Navbar:**
-  - The whiteboard page features a navbar with the app logo, room ID, share button (copies the link), and save button.
-- **Drawing Rights:**
-  - The host can pass drawing rights to any participant and can always take them back (revoke drawing).
-  - Only one participant can draw at a time, indicated by a brush icon in the sidebar.
-- **Participant Names:**
-  - When creating or joining a room, users must enter a unique 5-character alphanumeric name (unless logged in).
-- **Shareable Rooms:**
-  - Use the share button to copy the room link and invite others.
+### 1. **Install dependencies**
+
+```bash
+# In both frontend/ and backend/ directories:
+npm install
+```
+
+### 2. **Configure environment variables**
+
+- Set up your Supabase project and copy the API keys to `.env.local` in `frontend/` and `.env` in `backend/`.
+- Example variables:
+  ```
+  NEXT_PUBLIC_SUPABASE_URL=...
+  NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+  SUPABASE_URL=...
+  SUPABASE_ANON_KEY=...
+  DATABASE_URL=...
+  ```
+
+### 3. **Run the backend server**
+
+```bash
+cd backend
+npx ts-node src/index.ts
+# or if you have a dev script:
+npm run dev
+```
+
+### 4. **Run the frontend (Next.js) server**
+
+```bash
+cd frontend
+npx next dev
+```
+
+### 5. **Open the app**
+
+Visit [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## Key Features
+
+- **Create/Join Rooms:** Use a room ID and a 5-character name to join or create a whiteboard session.
+- **Real-Time Drawing:** All participants see updates instantly via Socket.IO.
+- **Drawing Tools:** Color picker, eraser, adjustable stroke width, undo, and clear.
+- **Host Controls:** Host can pass/revoke drawing rights; only one can draw at a time.
+- **Save/Load:** Only logged-in users can save whiteboards. Guests are prompted to log in before saving.
+- **Share:** Copy room link to invite others.
+- **Responsive UI:** Works on desktop and mobile.
+
+---
+
+## Documentation
+
+- **API Reference, Features, and Troubleshooting:** See the [README.md](./README.md)
+- **Feature Blueprint and Style Guide:** See [docs/blueprint.md](./docs/blueprint.md)
 
 ---
 
 ## Troubleshooting
 
-- **CORS Errors:**
-  - Ensure the backend uses the CORS middleware and allows requests from the frontend origin.
-- **404 on /auth or /auth/page:**
-  - The login page route is `/auth`, not `/auth/page`.
-- **500 Internal Server Error on /auth:**
-  - Make sure all hooks (useRouter, useSearchParams, useToast) are used inside a client component and, if needed, inside a `<Suspense>` boundary.
-- **Suspense Boundary Error:**
-  - Wrap any component using `useSearchParams` or `useRouter` in a `<Suspense>` boundary in the App Router.
+- **CORS errors:** Ensure backend CORS is enabled for frontend origin.
+- **404 on /auth:** Login page is `/auth`, not `/auth/page`.
+- **500 errors:** Ensure all React hooks are used in client components and, if needed, inside `<Suspense>`.
+- **Canvas zoom issues:** Canvas size is now synchronized for real-time updates.
 
 ---
 
-For more details, see the `docs/blueprint.md` file.
+For more details, see the full documentation in the `docs/` folder.

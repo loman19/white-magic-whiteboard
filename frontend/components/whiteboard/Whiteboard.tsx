@@ -42,6 +42,7 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
   const [isHost, setIsHost] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [tool, setTool] = useState<'draw' | 'eraser'>('draw');
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -58,17 +59,18 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
     });
   }, []);
 
-  // Fetch participants and current drawer
+  // Move fetchSession outside useEffect so it can be called from anywhere
+  const fetchSession = async () => {
+    const res = await fetch(`http://localhost:3001/api/whiteboard/${roomId}/session`);
+    if (res.ok) {
+      const { participants, current_drawer, owner_id } = await res.json();
+      setParticipants(participants);
+      setCurrentDrawer(current_drawer);
+      setIsHost(myParticipantId === owner_id);
+    }
+  };
+
   useEffect(() => {
-    const fetchSession = async () => {
-      const res = await fetch(`http://localhost:3001/api/whiteboard/${roomId}/session`);
-      if (res.ok) {
-        const { participants, current_drawer, owner_id } = await res.json();
-        setParticipants(participants);
-        setCurrentDrawer(current_drawer);
-        setIsHost(myParticipantId === owner_id);
-      }
-    };
     fetchSession();
   }, [roomId, myParticipantId]);
 
@@ -100,14 +102,21 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
       const startPoint = prevPoint ?? currentPoint;
       ctx.beginPath();
       ctx.lineWidth = strokeWidth;
-      ctx.strokeStyle = color;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      if (tool === 'eraser') {
+        ctx.globalCompositeOperation = 'destination-out';
+        ctx.strokeStyle = 'rgba(0,0,0,1)';
+      } else {
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = color;
+      }
       ctx.moveTo(startPoint.x, startPoint.y);
       ctx.lineTo(currentPoint.x, currentPoint.y);
       ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
     },
-    [color, strokeWidth]
+    [color, strokeWidth, tool]
   );
 
   const { canvasRef, onMouseDown, onMouseMove, onMouseUp, onTouchStart, onTouchMove, onTouchEnd } = useDraw(drawLine);
@@ -128,22 +137,38 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
       .catch(() => {});
   }, [roomId, canvasRef]);
 
-  async function updateCanvasWithData(data: string) {
+  // Emit whiteboard update to server (send width and height)
+  const emitWhiteboardUpdate = () => {
+    if (canvasRef.current && socketRef.current) {
+      const dataUrl = canvasRef.current.toDataURL();
+      socketRef.current.emit('whiteboard-update', {
+        roomId,
+        data: dataUrl,
+        width: canvasRef.current.width,
+        height: canvasRef.current.height,
+      });
+    }
+  };
+
+  // Update canvas with received data, resizing to match sender
+  async function updateCanvasWithData({ data, width, height }: { data: string, width: number, height: number }) {
     if (canvasRef.current) {
+      canvasRef.current.width = width;
+      canvasRef.current.height = height;
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
       const img = new Image();
       img.src = data;
       img.onload = () => {
         ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, width, height);
       };
     }
   }
 
   useEffect(() => {
-    const handler = (data: any) => {
-      updateCanvasWithData(data);
+    const handler = (payload: any) => {
+      updateCanvasWithData(payload);
     };
     socketRef.current.on('whiteboard-update', handler);
 
@@ -152,6 +177,7 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
         title: 'A new user joined!',
         description: `User ID: ${data.userId}`,
       });
+      fetchSession(); // Refresh the sidebar participants list
     };
     socketRef.current.on('user-joined', userJoinedHandler);
 
@@ -258,11 +284,11 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
 
   const handleMouseUp = () => {
     onMouseUp();
-    // handleSave(); // Remove auto-save
+    emitWhiteboardUpdate();
   };
   const handleTouchEnd = () => {
     onTouchEnd();
-    // handleSave(); // Remove auto-save
+    emitWhiteboardUpdate();
   };
 
   // Navbar with logo, room id, share, and save
@@ -324,6 +350,8 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
             undoLast={undoLast}
             isLoadingPalette={isLoadingPalette}
             palette={palette}
+            tool={tool}
+            setTool={setTool}
           />
           <canvas
             ref={canvasRef}

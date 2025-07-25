@@ -1,5 +1,7 @@
 # **App Name**: CollabCanvas
 
+> For setup instructions, API reference, and troubleshooting, see the main [README.md](../README.md).
+
 ## Core Features:
 
 - Session Management: Create or join a shared whiteboard session using a unique room ID.
