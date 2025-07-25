@@ -5,9 +5,17 @@ import http from 'http';
 import { Server } from 'socket.io';
 import { Pool } from 'pg';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
+import cors from 'cors';
 
 const app = express();
 const port = process.env.PORT || 3001;
+
+// Enable CORS for frontend origin
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true,
+}));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -127,6 +135,103 @@ app.get('/api/whiteboard/:roomId', async (req, res) => {
     return res.status(404).json({ error: 'Whiteboard data not found' });
   }
   res.json({ data: whiteboardData.data });
+});
+
+// Create a new whiteboard room (host is guest1 by default)
+app.post('/api/whiteboard/create', async (req, res) => {
+  const { userId } = req.body;
+  const roomId = crypto.randomUUID().slice(0, 8);
+  const host = userId || 'guest1';
+  const participants = [host];
+  const { error } = await supabase
+    .from('whiteboard_sessions')
+    .insert([{ room_id: roomId, owner_id: host, participants, current_drawer: host, created_at: new Date().toISOString() }]);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ roomId, guestName: host });
+});
+
+// Set the current drawer
+app.post('/api/whiteboard/set-drawer', async (req, res) => {
+  const { roomId, drawerId } = req.body;
+  if (!roomId || !drawerId) return res.status(400).json({ error: 'Missing roomId or drawerId' });
+
+  const { error } = await supabase
+    .from('whiteboard_sessions')
+    .update({ current_drawer: drawerId })
+    .eq('room_id', roomId);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  io.to(roomId).emit('drawer-changed', { drawerId });
+
+  res.json({ success: true });
+});
+
+// Join a whiteboard room (assign guestN or use userId)
+app.post('/api/whiteboard/join', async (req, res) => {
+  const { roomId, userId } = req.body;
+  if (!roomId) return res.status(400).json({ error: 'Missing roomId' });
+
+  // Fetch current participants
+  const { data: session, error: fetchError } = await supabase
+    .from('whiteboard_sessions')
+    .select('participants')
+    .eq('room_id', roomId)
+    .single();
+
+  if (fetchError || !session) return res.status(404).json({ error: 'Room not found' });
+
+  let participantId = userId;
+  let participants = session.participants || [];
+
+  if (!participantId) {
+    // Assign next guest name
+    const guestNumbers = participants
+      .filter((p: string) => typeof p === 'string' && p.startsWith('guest'))
+      .map((p: string) => parseInt(p.replace('guest', ''), 10))
+      .filter((n: number) => !isNaN(n));
+    const nextGuestNum = guestNumbers.length > 0 ? Math.max(...guestNumbers) + 1 : 2;
+    participantId = `guest${nextGuestNum}`;
+  }
+
+  if (!participants.includes(participantId)) {
+    participants.push(participantId);
+    const { error: updateError } = await supabase
+      .from('whiteboard_sessions')
+      .update({ participants })
+      .eq('room_id', roomId);
+    if (updateError) return res.status(500).json({ error: updateError.message });
+  }
+
+  res.json({ participantId });
+});
+
+// Update host after login
+app.post('/api/whiteboard/update-host', async (req, res) => {
+  const { roomId, userId } = req.body;
+  if (!roomId || !userId) return res.status(400).json({ error: 'Missing roomId or userId' });
+
+  // Update owner_id from guest1 to userId
+  const { error } = await supabase
+    .from('whiteboard_sessions')
+    .update({ owner_id: userId })
+    .eq('room_id', roomId)
+    .eq('owner_id', 'guest1');
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ success: true });
+});
+
+// Get session info for a room
+app.get('/api/whiteboard/:roomId/session', async (req, res) => {
+  const { roomId } = req.params;
+  const { data: session, error } = await supabase
+    .from('whiteboard_sessions')
+    .select('participants, current_drawer, owner_id')
+    .eq('room_id', roomId)
+    .single();
+  if (error || !session) return res.status(404).json({ error: 'Session not found' });
+  res.json(session);
 });
 
 server.listen(port, () => {
