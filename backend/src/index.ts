@@ -132,7 +132,8 @@ app.get('/api/whiteboard/:roomId', async (req, res) => {
     .eq('session_id', sessionData.id)
     .single();
   if (dataError || !whiteboardData) {
-    return res.status(404).json({ error: 'Whiteboard data not found' });
+    // Instead of 404, return empty data for new boards
+    return res.json({ data: [] });
   }
   res.json({ data: whiteboardData.data });
 });

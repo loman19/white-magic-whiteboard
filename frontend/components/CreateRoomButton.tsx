@@ -24,7 +24,12 @@ export function CreateRoomButton() {
   const router = useRouter();
   const handleCreateRoom = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    let userId = user?.id || 'guest1';
+    let userId = user?.id;
+    if (!userId) {
+      const guestName = promptGuestName();
+      if (!guestName) return; // user cancelled
+      userId = guestName;
+    }
     try {
       const res = await fetch('http://localhost:3001/api/whiteboard/create', {
         method: 'POST',
@@ -32,7 +37,6 @@ export function CreateRoomButton() {
         body: JSON.stringify({ userId }),
       });
       const data = await res.json();
-      console.log('Create room response:', data);
       if (res.ok && data.roomId) {
         router.push(`/whiteboard/${data.roomId}`);
       } else {

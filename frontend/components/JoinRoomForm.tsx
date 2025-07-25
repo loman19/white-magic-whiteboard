@@ -20,6 +20,9 @@ const formSchema = z.object({
   roomId: z.string().min(2, {
     message: 'Room ID must be at least 2 characters.',
   }),
+  participantName: z.string().regex(/^[a-zA-Z0-9]{5}$/, {
+    message: 'Name must be exactly 5 letters/numbers.',
+  }),
 });
 
 export function JoinRoomForm() {
@@ -28,11 +31,19 @@ export function JoinRoomForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       roomId: '',
+      participantName: '',
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    router.push(`/whiteboard/${values.roomId}`);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    // Optionally, call the backend join endpoint here
+    await fetch('http://localhost:3001/api/whiteboard/join', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: values.roomId, userId: values.participantName }),
+    });
+    // Pass participantName as a query param or state if needed by the whiteboard page
+    router.push(`/whiteboard/${values.roomId}?user=${values.participantName}`);
   }
 
   return (
@@ -45,6 +56,18 @@ export function JoinRoomForm() {
             <FormItem>
               <FormControl>
                 <Input placeholder="Enter Room ID" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="participantName"
+          render={({ field }) => (
+            <FormItem>
+              <FormControl>
+                <Input placeholder="Enter 5-char Name" maxLength={5} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
