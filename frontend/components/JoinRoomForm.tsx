@@ -20,8 +20,8 @@ const formSchema = z.object({
   roomId: z.string().min(2, {
     message: 'Room ID must be at least 2 characters.',
   }),
-  participantName: z.string().regex(/^[a-zA-Z0-9]{5}$/, {
-    message: 'Name must be exactly 5 letters/numbers.',
+  participantName: z.string().regex(/^[a-zA-Z0-9]{5,}$/, {
+    message: 'Name must be at least 5 letters/numbers.',
   }),
 });
 
@@ -67,7 +67,7 @@ export function JoinRoomForm() {
           render={({ field }) => (
             <FormItem>
               <FormControl>
-                <Input placeholder="Enter 5-char Name" maxLength={5} {...field} />
+                <Input placeholder="Enter name (min 5 chars)" maxLength={20} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

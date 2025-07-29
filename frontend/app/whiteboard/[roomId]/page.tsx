@@ -12,9 +12,16 @@ const supabase = createClient(
 
 function promptGuestName(): string | null {
   let name = '';
-  while (!/^[a-zA-Z0-9]{5}$/.test(name)) {
-    name = window.prompt('Enter a 5-character guest name (letters/numbers only):', '') || '';
+  while (!/^[a-zA-Z0-9]{5,}$/.test(name)) {
+    name = window.prompt('Enter a guest name (minimum 5 letters/numbers only):', '') || '';
     if (name === null) return null;
+    if (name.length < 5) {
+      alert('Name must be at least 5 characters long.');
+      name = '';
+    } else if (!/^[a-zA-Z0-9]+$/.test(name)) {
+      alert('Name can only contain letters and numbers.');
+      name = '';
+    }
   }
   return name;
 }
@@ -30,8 +37,8 @@ export default function WhiteboardPage() {
     const joinRoom = async () => {
       let userId = searchParams.get('user');
       if (!userId) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) userId = user.id;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) userId = user.id;
       }
       if (!userId) {
         userId = promptGuestName();

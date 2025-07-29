@@ -12,19 +12,9 @@ export const useDraw = (onDraw: ({ ctx, currentPoint, prevPoint }: Draw) => void
     const canvas = canvasRef.current;
     if (canvas) {
       const resizeCanvas = () => {
-        const currentDrawing = canvas.toDataURL();
-        const ratio = Math.max(window.devicePixelRatio || 1, 1);
-        canvas.width = canvas.offsetWidth * ratio;
-        canvas.height = canvas.offsetHeight * ratio;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.scale(ratio, ratio);
-          const img = new Image();
-          img.src = currentDrawing;
-          img.onload = () => {
-             ctx.drawImage(img, 0, 0, canvas.offsetWidth, canvas.offsetHeight);
-          }
-        }
+        // Set canvas size to match its display size (no scaling)
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
       };
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);

@@ -11,6 +11,21 @@
       "static/chunks/main-app.js",
       "static/chunks/app/page.js"
     ],
+    "/auth/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/auth/page.js"
+    ],
+    "/signup/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/signup/page.js"
+    ],
+    "/saved/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/saved/page.js"
+    ],
     "/whiteboard/[roomId]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",

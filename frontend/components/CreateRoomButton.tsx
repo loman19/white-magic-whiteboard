@@ -13,9 +13,16 @@ const supabase = createClient(
 
 function promptGuestName(): string | null {
   let name = '';
-  while (!/^[a-zA-Z0-9]{5}$/.test(name)) {
-    name = window.prompt('Enter a 5-character guest name (letters/numbers only):', '') || '';
+  while (!/^[a-zA-Z0-9]{5,}$/.test(name)) {
+    name = window.prompt('Enter a guest name (minimum 5 letters/numbers only):', '') || '';
     if (name === null) return null;
+    if (name.length < 5) {
+      alert('Name must be at least 5 characters long.');
+      name = '';
+    } else if (!/^[a-zA-Z0-9]+$/.test(name)) {
+      alert('Name can only contain letters and numbers.');
+      name = '';
+    }
   }
   return name;
 }
@@ -38,7 +45,8 @@ export function CreateRoomButton() {
       });
       const data = await res.json();
       if (res.ok && data.roomId) {
-        router.push(`/whiteboard/${data.roomId}`);
+        // Pass the user ID as a query parameter
+        router.push(`/whiteboard/${data.roomId}?user=${userId}`);
       } else {
         alert(data.error || 'Failed to create room');
       }

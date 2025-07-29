@@ -43,6 +43,8 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
   const router = useRouter();
   const searchParams = useSearchParams();
   const [tool, setTool] = useState<'draw' | 'eraser'>('draw');
+  const [justRequestedCanvas, setJustRequestedCanvas] = useState(false);
+  const [userInfo, setUserInfo] = useState<{ name?: string; email?: string } | null>(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -53,22 +55,24 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
           .eq('user_id', user.id)
           .single();
         setUserName(profile?.name || user.email || user.id);
+        setUserInfo({ name: profile?.name, email: user.email });
       } else {
         setUserName(null);
+        setUserInfo(null);
       }
     });
   }, []);
 
   // Move fetchSession outside useEffect so it can be called from anywhere
-  const fetchSession = async () => {
-    const res = await fetch(`http://localhost:3001/api/whiteboard/${roomId}/session`);
-    if (res.ok) {
-      const { participants, current_drawer, owner_id } = await res.json();
-      setParticipants(participants);
-      setCurrentDrawer(current_drawer);
-      setIsHost(myParticipantId === owner_id);
-    }
-  };
+    const fetchSession = async () => {
+      const res = await fetch(`http://localhost:3001/api/whiteboard/${roomId}/session`);
+      if (res.ok) {
+        const { participants, current_drawer, owner_id } = await res.json();
+        setParticipants(participants);
+        setCurrentDrawer(current_drawer);
+        setIsHost(myParticipantId === owner_id);
+      }
+    };
 
   useEffect(() => {
     fetchSession();
@@ -85,6 +89,17 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
     };
   }, [socketRef]);
 
+  // When current drawer changes, request canvas state if we're the new drawer
+  useEffect(() => {
+    if (currentDrawer === myParticipantId && socketRef.current) {
+      // Request current canvas state from other participants
+      setJustRequestedCanvas(true);
+      socketRef.current.emit('request-canvas-state', { roomId });
+      // Reset flag after a short delay
+      setTimeout(() => setJustRequestedCanvas(false), 1000);
+    }
+  }, [currentDrawer, myParticipantId, roomId, socketRef]);
+
   // Pass drawing permission (host only)
   const passDrawingPermission = async (participantId: string) => {
     await fetch('http://localhost:3001/api/whiteboard/set-drawer', {
@@ -92,6 +107,17 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomId, drawerId: participantId }),
     });
+    
+    // Sync current canvas state to the new drawer
+    if (canvasRef.current && socketRef.current) {
+      const dataUrl = canvasRef.current.toDataURL();
+      socketRef.current.emit('whiteboard-update', {
+        roomId,
+        data: dataUrl,
+        width: canvasRef.current.width,
+        height: canvasRef.current.height,
+      });
+    }
   };
 
   // Only current drawer can draw
@@ -129,7 +155,7 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
           const img = new Image();
           img.src = data;
           img.onload = () => {
-            ctx?.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
+            // Don't resize the canvas, just draw the image at its natural size
             ctx?.drawImage(img, 0, 0);
           };
         }
@@ -139,8 +165,9 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
 
   // Emit whiteboard update to server (send width and height)
   const emitWhiteboardUpdate = () => {
-    if (canvasRef.current && socketRef.current) {
+    if (canvasRef.current && socketRef.current && canDraw) {
       const dataUrl = canvasRef.current.toDataURL();
+      console.log('Emitting whiteboard update:', { roomId, canDraw, myParticipantId });
       socketRef.current.emit('whiteboard-update', {
         roomId,
         data: dataUrl,
@@ -153,37 +180,76 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
   // Update canvas with received data, resizing to match sender
   async function updateCanvasWithData({ data, width, height }: { data: string, width: number, height: number }) {
     if (canvasRef.current) {
-      canvasRef.current.width = width;
-      canvasRef.current.height = height;
+      // Only update if we're not the current drawer (to avoid clearing our own work)
+      // But allow updates when we just became the current drawer (requested canvas state)
+      if (canDraw && currentDrawer === myParticipantId && !justRequestedCanvas) {
+        console.log('Skipping update - we are the current drawer');
+        return;
+      }
+      
+      console.log('Updating canvas with data:', { canDraw, currentDrawer, myParticipantId, justRequestedCanvas });
+      
+      // Only resize if the difference is significant (more than 10px)
+      const currentWidth = canvasRef.current.width;
+      const currentHeight = canvasRef.current.height;
+      const widthDiff = Math.abs(currentWidth - width);
+      const heightDiff = Math.abs(currentHeight - height);
+      
+      if (widthDiff > 10 || heightDiff > 10) {
+        console.log('Resizing canvas:', { currentWidth, currentHeight, width, height });
+        canvasRef.current.width = width;
+        canvasRef.current.height = height;
+      }
+      
       const ctx = canvasRef.current.getContext('2d');
       if (!ctx) return;
       const img = new Image();
       img.src = data;
       img.onload = () => {
+        // Clear the canvas before drawing the new image to avoid overlapping
         ctx.clearRect(0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        ctx.drawImage(img, 0, 0, width, height);
+        ctx.drawImage(img, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
       };
     }
   }
 
   useEffect(() => {
     const handler = (payload: any) => {
+      console.log('Received whiteboard-update:', payload);
       updateCanvasWithData(payload);
     };
     socketRef.current.on('whiteboard-update', handler);
 
     const userJoinedHandler = (data: any) => {
+      console.log('User joined:', data);
+      // Fetch session to get the updated participant list and show the actual name
+      fetchSession();
       toast({
         title: 'A new user joined!',
-        description: `User ID: ${data.userId}`,
+        description: data.participantName ? `${data.participantName} joined the room.` : 'Check the participants list to see who joined.',
       });
-      fetchSession(); // Refresh the sidebar participants list
     };
     socketRef.current.on('user-joined', userJoinedHandler);
+
+    const requestCanvasStateHandler = () => {
+      console.log('Received request-canvas-state');
+      // Send current canvas state when requested
+      if (canvasRef.current && socketRef.current) {
+        const dataUrl = canvasRef.current.toDataURL();
+        socketRef.current.emit('whiteboard-update', {
+          roomId,
+          data: dataUrl,
+          width: canvasRef.current.width,
+          height: canvasRef.current.height,
+        });
+      }
+    };
+    socketRef.current.on('request-canvas-state', requestCanvasStateHandler);
 
     return () => {
       socketRef.current?.off('whiteboard-update', handler);
       socketRef.current?.off('user-joined', userJoinedHandler);
+      socketRef.current?.off('request-canvas-state', requestCanvasStateHandler);
     };
   }, [socketRef]);
 
@@ -251,7 +317,9 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
   };
 
   const handleShare = () => {
-    navigator.clipboard.writeText(window.location.href);
+    // Copy the current URL without any user parameter, so new users will be prompted for their name
+    const shareUrl = `${window.location.origin}/whiteboard/${roomId}`;
+    navigator.clipboard.writeText(shareUrl);
     toast({
       title: 'Copied to clipboard!',
       description: 'You can now share the link with others.',
@@ -298,6 +366,17 @@ export function Whiteboard({ roomId, myParticipantId }: { roomId: string, myPart
       <nav className="w-full flex items-center justify-between p-2 bg-gray-100 rounded mb-2 shadow">
         <div className="flex items-center gap-2">
           <Logo />
+          {userInfo && (
+            <Button 
+              onClick={() => window.open('/saved', '_blank')}
+              variant="secondary"
+              size="sm"
+              className="cursor-pointer hover:bg-indigo-100 transition-colors"
+              title="Click to view your saved whiteboards"
+            >
+              {userInfo.name || userInfo.email}
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" disabled>

@@ -57,8 +57,8 @@ io.on('connection', (socket) => {
 
   socket.on('join-room', (roomId) => {
     socket.join(roomId);
-    // Notify others in the room
-    socket.to(roomId).emit('user-joined', { userId: socket.id });
+    // Notify others in the room - we'll get the actual participant name from the join endpoint
+    socket.to(roomId).emit('user-joined', { roomId });
     console.log(`Socket ${socket.id} joined room ${roomId}`);
   });
 
@@ -67,9 +67,16 @@ io.on('connection', (socket) => {
     console.log(`Socket ${socket.id} left room ${roomId}`);
   });
 
-  socket.on('whiteboard-update', ({ roomId, data }) => {
-    // Broadcast to all other users in the room
-    socket.to(roomId).emit('whiteboard-update', data);
+  socket.on('whiteboard-update', ({ roomId, data, width, height }) => {
+    // Broadcast to all other users in the room with complete data object
+    console.log('Broadcasting whiteboard update to room:', roomId);
+    socket.to(roomId).emit('whiteboard-update', { data, width, height });
+  });
+
+  socket.on('request-canvas-state', ({ roomId }) => {
+    // Broadcast request to other users in the room
+    console.log('Broadcasting canvas state request to room:', roomId);
+    socket.to(roomId).emit('request-canvas-state', { roomId });
   });
 
   socket.on('disconnect', () => {
@@ -79,38 +86,67 @@ io.on('connection', (socket) => {
 
 // Save whiteboard session
 app.post('/api/whiteboard/save', async (req, res) => {
-  const { roomId, data, userId } = req.body;
-  if (!roomId || !data) {
-    return res.status(400).json({ error: 'roomId and data are required' });
+  try {
+    const { roomId, data, userId } = req.body;
+    console.log('Save request:', { roomId, userId, dataLength: data?.length });
+    
+    if (!roomId || !data) {
+      return res.status(400).json({ error: 'roomId and data are required' });
+    }
+    if (!userId) {
+      // Anonymous users cannot save
+      return res.status(401).json({ error: 'You must be logged in to save your whiteboard.' });
+    }
+    
+    // Upsert session by roomId and owner_id
+    const { error } = await supabase
+      .from('whiteboard_sessions')
+      .upsert([{ room_id: roomId, owner_id: userId, updated_at: new Date().toISOString() }], { onConflict: 'room_id' });
+    if (error) {
+      console.error('Session upsert error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    
+    // Get session id
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('whiteboard_sessions')
+      .select('id')
+      .eq('room_id', roomId)
+      .single();
+    if (sessionError || !sessionData) {
+      console.error('Session fetch error:', sessionError);
+      return res.status(500).json({ error: sessionError?.message || 'Session not found' });
+    }
+    
+    // Upsert whiteboard data - try update first, then insert if not exists
+    let dataError = null;
+    
+    // First try to update existing data
+    const { error: updateError } = await supabase
+      .from('whiteboard_data')
+      .update({ data, updated_at: new Date().toISOString() })
+      .eq('session_id', sessionData.id);
+    
+    if (updateError) {
+      console.log('Update failed, trying insert:', updateError.message);
+      // If update fails (no record exists), try insert
+      const { error: insertError } = await supabase
+        .from('whiteboard_data')
+        .insert([{ session_id: sessionData.id, data, updated_at: new Date().toISOString() }]);
+      dataError = insertError;
+    }
+    
+    if (dataError) {
+      console.error('Data save error:', dataError);
+      return res.status(500).json({ error: dataError.message });
+    }
+    
+    console.log('Save successful for room:', roomId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Save endpoint error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
-  if (!userId) {
-    // Anonymous users cannot save
-    return res.status(401).json({ error: 'You must be logged in to save your whiteboard.' });
-  }
-  // Upsert session by roomId and owner_id
-  const { error } = await supabase
-    .from('whiteboard_sessions')
-    .upsert([{ room_id: roomId, owner_id: userId, updated_at: new Date().toISOString() }], { onConflict: 'room_id' });
-  if (error) {
-    return res.status(500).json({ error: error.message });
-  }
-  // Get session id
-  const { data: sessionData, error: sessionError } = await supabase
-    .from('whiteboard_sessions')
-    .select('id')
-    .eq('room_id', roomId)
-    .single();
-  if (sessionError || !sessionData) {
-    return res.status(500).json({ error: sessionError?.message || 'Session not found' });
-  }
-  // Upsert whiteboard data
-  const { error: dataError } = await supabase
-    .from('whiteboard_data')
-    .upsert([{ session_id: sessionData.id, data, updated_at: new Date().toISOString() }], { onConflict: 'session_id' });
-  if (dataError) {
-    return res.status(500).json({ error: dataError.message });
-  }
-  res.json({ success: true });
 });
 
 // Load whiteboard session
@@ -202,6 +238,9 @@ app.post('/api/whiteboard/join', async (req, res) => {
       .update({ participants })
       .eq('room_id', roomId);
     if (updateError) return res.status(500).json({ error: updateError.message });
+    
+    // Emit user-joined event with the actual participant name
+    io.to(roomId).emit('user-joined', { participantName: participantId });
   }
 
   res.json({ participantId });
@@ -233,6 +272,36 @@ app.get('/api/whiteboard/:roomId/session', async (req, res) => {
     .single();
   if (error || !session) return res.status(404).json({ error: 'Session not found' });
   res.json(session);
+});
+
+// Get all saved whiteboards for a user
+app.get('/api/whiteboard/user/:userId/saved', async (req, res) => {
+  const { userId } = req.params;
+  
+  try {
+    const { data, error } = await supabase
+      .from('whiteboard_sessions')
+      .select(`
+        id,
+        room_id,
+        owner_id,
+        created_at,
+        updated_at,
+        whiteboard_data(data)
+      `)
+      .eq('owner_id', userId)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching saved whiteboards:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    res.json({ whiteboards: data || [] });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 server.listen(port, () => {

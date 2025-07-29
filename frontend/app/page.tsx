@@ -1,3 +1,7 @@
+"use client";
+
+import { useRouter } from 'next/navigation';
+import { Button } from '../components/ui/button';
 import {
   Card,
   CardContent,
@@ -9,8 +13,16 @@ import { Separator } from '../components/ui/separator';
 import { CreateRoomButton } from '../components/CreateRoomButton';
 import { JoinRoomForm } from '../components/JoinRoomForm';
 import { Logo } from '../components/Logo';
+import { BookOpen } from 'lucide-react';
 
 export default function Home() {
+  const router = useRouter();
+
+  const handleSavedWhiteboards = () => {
+    // Redirect to saved whiteboards page, which will handle authentication
+    router.push('/saved');
+  };
+
   return (
     <main className="flex min-h-svh w-full items-center justify-center bg-background p-4">
       <div className="flex flex-col items-center justify-center">
@@ -26,6 +38,14 @@ export default function Home() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-4">
+              <Button 
+                onClick={handleSavedWhiteboards}
+                variant="outline"
+                className="w-full"
+              >
+                <BookOpen className="w-4 h-4 mr-2" />
+                My Saved Whiteboards
+              </Button>
               <CreateRoomButton />
               <div className="flex items-center gap-4">
                 <Separator className="flex-1" />
